@@ -1,5 +1,6 @@
 from unittest import TestCase
 
+import numpy as np
 from sklearn.linear_model import LinearRegression
 
 from omegaml import Omega
@@ -37,3 +38,27 @@ class PromotionMixinTests(OmegaTestMixin, TestCase):
         # promote to prod
         om.models.promote('mymodel', prod.models)
         self.assertIn('mymodel', prod.models.list())
+
+    def test_promotion_runtime(self):
+        om = self.om
+        prod = om['prod']
+        reg = LinearRegression()
+        om.models.put(reg, 'mymodel')
+        # ensure dataset is in default bucket, not in prod
+        self.assertIn('mymodel', om.models.list())
+        self.assertNotIn('mymodel', prod.models.list())
+        # try running on default runtime
+        X = np.random.randint(0, 100, (100,)).reshape(-1, 1)
+        Y = X * 2
+        result = om.runtime.model('mymodel').fit(X, Y).get()
+        assert 'Metadata' in result
+        # try running on prod runtime -- should not work
+        with self.assertRaises(AssertionError):
+            prod.runtime.model('mymodel').fit(X, Y).get()
+        # promote to prod
+        om.models.promote('mymodel', prod.models)
+        # try running on prod runtime -- now should work
+        result = prod.runtime.model('mymodel').fit(X, Y).get()
+        assert 'Metadata' in result
+        self.assertIn('mymodel', prod.models.list())
+
